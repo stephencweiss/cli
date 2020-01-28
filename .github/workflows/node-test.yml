@@ -1,0 +1,62 @@
+---
+name: Node Testing
+
+on: [pull-request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout nodejs/node repository
+      - uses: actions/checkout@v2
+        with:
+          repository: nodejs/node
+          path: "./node"
+      # Checkout npm/cli repository
+      - uses: actions/checkout@v2
+        with:
+          repository: npm/cli
+          path: "./cli"
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Create & Test Release
+      - name: Test Release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_COMMITS_URL: ${{ github.event.pull_request.commits_url }}
+          PR_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Event Handler
+
+          # Creates an exit early condition if there are errors
+          # Exit early if `jq` is not present
+          set -e
+          jq --version
+
+          # TESTING
+          pwd
+
+          # Move to CLI repository
+          cd "${GITHUB_WORKSPACE}/cli"
+
+          # Store current npm version
+          NPM_VERSION=$(cat package.json | jq -r .version)
+
+          # Create release tarballs
+          make release
+
+          # Move to NodeJS repository
+          cd "${GITHUB_WORKSPACE}/node"
+
+          # Remove current npm dep
+          rm -rf deps/npm
+
+          # Unpack tar in node
+          cd "${GITHUB_WORKSPACE}/node/deps"
+          tar xfz "${GITHUB_WORKSPACE}/cli/release/npm-${NPM_VERSION}.tgz"
+
+          # Run NodeJS tests against CLI
+          cd "${GITHUB_WORKSPACE}/node"
+          PATH=/sbin:/usr/sbin:/bin:/usr/bin make test-npm
